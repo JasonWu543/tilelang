@@ -1,0 +1,60 @@
+Pipeline Gotchas: Buffer Reuse Across T.Pipelined Loops
+======================================================
+
+Summary
+-------
+TileLang's software pipeline (T.Pipelined) performs multi-versioning on buffers
+used inside the loop. A single buffer object must not be used in more than one
+T.Pipelined loop in the same kernel. This includes read-only fragments.
+
+Typical Error
+-------------
+InternalError: Buffer 'X' is used in multiple software pipeline loops.
+This is not supported because multi-versioning would conflict.
+
+Why This Happens
+----------------
+Each T.Pipelined loop may rewrite or multi-version the buffers it touches.
+Reusing the same buffer object across different pipelined loops makes the
+compiler attempt to assign incompatible versions for the same buffer.
+
+Common Triggers
+---------------
+- Using the same fragment/shared buffer in Pass 1/2/3 pipelines.
+- Read-only buffers (e.g., Q fragments) reused across multiple pipelines.
+- Accumulator buffers shared across multiple pipelines without a snapshot.
+
+Workarounds
+-----------
+1) Use per-pass buffers (recommended)
+   - Allocate new fragments for each T.Pipelined loop.
+   - Reload inputs per pass if needed.
+
+2) Snapshot after a pipeline
+   - Copy the result into a new fragment buffer (e.g., *_ro) and use the copy
+     in later pipelines.
+
+3) Avoid T.Pipelined for one of the loops
+   - Use T.serial or a non-pipelined loop when buffer reuse is required.
+
+4) Split the kernel
+   - Separate passes into multiple kernels if the dependency chain is complex.
+
+Example Pattern
+---------------
+# Pass 1
+max_p1 = T.alloc_fragment([1], acc)
+for k in T.Pipelined(...):
+    ...
+# Snapshot for later passes
+max_ro = T.alloc_fragment([1], acc)
+max_ro[0] = max_p1[0]
+
+# Pass 2 uses max_ro, not max_p1
+for k in T.Pipelined(...):
+    ...
+
+Notes
+-----
+- This is a compiler limitation of the current software pipeline pass.
+- The error is about the buffer object identity, not the buffer name.

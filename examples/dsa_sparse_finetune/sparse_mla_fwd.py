@@ -27,6 +27,7 @@ def sparse_mla_fwd(
     num_stages=2,
     threads=128,
 ):
+    # 一些最基本的检查
     assert dim == tilelang.math.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
     assert tail_dim == tilelang.math.next_power_of_2(tail_dim), f"haven't check padding correctness yet, dim={tail_dim}"
     assert is_causal == True, "non-casual is not supported"
